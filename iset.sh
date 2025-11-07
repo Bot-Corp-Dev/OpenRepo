@@ -116,7 +116,7 @@ echo "📦 Step 6/6: Generating SSH Key for GitHub..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Set SSH key identifier (change this to your preference)
-SSH_KEY_LABEL="REPLACE_WITH_IDENTIFIER"
+SSH_KEY_LABEL="RelyBot-VPS"
 
 # Create .ssh directory if it doesn't exist
 mkdir -p ~/.ssh

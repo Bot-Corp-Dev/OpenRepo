@@ -1,0 +1,190 @@
+#!/bin/bash
+
+# ============================================
+# RelyBot VPS Automated Setup Script
+# Installs ALL dependencies and configures the server
+# ============================================
+
+set -e  # Exit on any error
+
+echo ""
+echo "╔════════════════════════════════════════════════════════════╗"
+echo "║          RelyBot VPS Automated Setup Script               ║"
+echo "║                                                            ║"
+echo "║  This script will install and configure:                  ║"
+echo "║  • Node.js v22 LTS (Active until April 2027)               ║"
+echo "║  • Redis 7.2+ (Latest Stable)                              ║"
+echo "║  • PM2 Process Manager                                     ║"
+echo "║  • Nginx Web Server                                        ║"
+echo "║  • SSH Key for GitHub (Auto-generated)                     ║"
+echo "║                                                            ║"
+echo "║  Note: MySQL Server NOT needed (using GoDaddy database)   ║"
+echo "╚════════════════════════════════════════════════════════════╝"
+echo ""
+
+# Check if running as root
+if [ "$EUID" -eq 0 ]; then 
+    echo "❌ Please DO NOT run this script as root (don't use sudo)"
+    echo "The script will ask for sudo password when needed."
+    exit 1
+fi
+
+# ============================================
+# Step 1: System Update
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 Step 1/9: Updating system packages..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sudo apt update
+sudo apt upgrade -y
+echo "✅ System updated"
+echo ""
+
+# ============================================
+# Step 2: Install Node.js 22.x LTS
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 Step 2/9: Installing Node.js v22 LTS (Latest)..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+echo "✅ Node.js installed: $(node --version)"
+echo "✅ npm installed: $(npm --version)"
+echo ""
+
+
+# ============================================
+# Step 3: Install Redis 7.2+ (Latest Stable)
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 Step 3/5: Installing Redis 7.2+ (Latest Stable)..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Add Redis official repository
+curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+
+# Update and install Redis
+sudo apt update
+sudo apt install -y redis
+
+# Start Redis service
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+
+# Test Redis
+redis-cli ping > /dev/null && echo "✅ Redis 7.2+ installed and running (PONG received)" || echo "⚠️  Redis installed but not responding"
+echo ""
+
+# ============================================
+# Step 4: Install PM2 Process Manager
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 Step 4/5: Installing PM2 Process Manager..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sudo npm install -g pm2
+
+echo "✅ PM2 installed: $(pm2 --version)"
+echo ""
+
+# Setup PM2 startup script
+echo "Setting up PM2 to start on system boot..."
+pm2 startup | grep "sudo" | bash
+echo "✅ PM2 startup configured"
+echo ""
+
+# ============================================
+# Step 5: Install Nginx
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 Step 5/5: Installing Nginx Web Server..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sudo apt install -y nginx
+
+# Start Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+echo "✅ Nginx installed and running"
+echo ""
+
+# ============================================
+# Step 6: Generate SSH Key for GitHub
+# ============================================
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📦 Step 6/6: Generating SSH Key for GitHub..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Set SSH key identifier (change this to your preference)
+SSH_KEY_LABEL="REPLACE_WITH_IDENTIFIER"
+
+# Create .ssh directory if it doesn't exist
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+# Generate SSH key (ED25519 is more secure than RSA)
+if [ ! -f ~/.ssh/id_ed25519 ]; then
+    ssh-keygen -t ed25519 -C "${SSH_KEY_LABEL}" -f ~/.ssh/id_ed25519 -N ""
+    echo "✅ SSH key generated successfully"
+else
+    echo "⚠️  SSH key already exists, skipping generation"
+fi
+
+# Start SSH agent and add key
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+
+echo ""
+echo "✅ SSH key ready for GitHub"
+echo ""
+
+# ============================================
+# Final Summary
+# ============================================
+echo ""
+echo "╔════════════════════════════════════════════════════════════╗"
+echo "║              ✅ INSTALLATION COMPLETE! ✅                   ║"
+echo "╚════════════════════════════════════════════════════════════╝"
+echo ""
+echo "📦 Installed Software (Latest Stable Versions):"
+echo "   ✅ Node.js $(node --version) LTS (Maintained until April 2027)"
+echo "   ✅ npm $(npm --version)"
+echo "   ✅ Redis 7.2+ (Latest Stable)"
+echo "   ✅ PM2 $(pm2 --version) (Latest)"
+echo "   ✅ Nginx (Latest Stable)"
+echo "   ✅ SSH Key for GitHub (Generated)"
+echo ""
+echo "📝 Database: Using GoDaddy MySQL (credentials in your .env file)"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📋 ADD THIS SSH KEY TO GITHUB:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+cat ~/.ssh/id_ed25519.pub
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "⚠️  IMPORTANT: Next Steps!"
+echo ""
+echo "1️⃣  Copy the SSH key above"
+echo ""
+echo "2️⃣  Add it to GitHub:"
+echo "   → Go to: https://github.com/settings/keys"
+echo "   → Click: 'New SSH key'"
+echo "   → Paste the key above"
+echo "   → Click: 'Add SSH key'"
+echo ""
+echo "3️⃣  Clone your repository:"
+echo "   cd ~"
+echo "   git clone git@github.com:Bot-Corp-Dev/RelyBot.git"
+echo "   cd RelyBot"
+echo ""
+echo "4️⃣  Install npm dependencies:"
+echo "   npm install"
+echo ""
+echo "5️⃣  Start the application:"
+echo "   npm run pm2:start"
+echo ""
+echo "🎉 Your VPS is ready!"
+echo ""
+
